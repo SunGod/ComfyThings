@@ -1,41 +1,91 @@
 # ComfyThings
+
 **A Draw Things to ComfyUI metadata and media exporter**  
-Bulk export all of your images and videos from any of your Draw Things projects to PNGs, saving all of your original generation metadata and workflow details into the image, and then you can use these original Draw Things workflows in ComfyUI.
-
 **Platform:** macOS  
-**Release:** v1.01 (October 2026)
+**Current release:** v1.02 (November 2026)
 
-ComfyThings exports images stored in **Draw Things SQLite project databases** as full-resolution PNG files containing reconstructed **ComfyUI workflows** and available original generation information. It can also export encoded videos, per-video workflow PNGs, optional individual frames, and audio.
+Draw Things keeps your generated images, videos, and generation history inside project databases. That's convenient while you're working in Draw Things, but not so convenient when you want your creations as individual files—or when you want to revisit them in ComfyUI.
 
-The exporter reads the source database **without modifying it**, operates on **one image at a time**, and supports verifying and resuming existing exports. Reconstructed workflows are best-effort: model availability and ComfyUI node compatibility depend on the local ComfyUI installation.
+**ComfyThings exports an entire Draw Things project in one run.** You get full-resolution PNG images with ComfyUI workflows built in, plus playable video files with their ComfyUI workflows embedded directly in the videos. Original generation details are preserved wherever available, so you can inspect and work with the results later without having to open the project database.
+
+You don't have to export images one at a time, copy prompts by hand, or save a separate workflow JSON for every image. ComfyThings reads a **copy** of a Draw Things `.sqlite3` project database; it does not change the database or generate new images.
 
 ## Contents
 
+- [What's Changed in v1.02 (Compared with v1.01)](#whats-changed-in-v102-compared-with-v101)
+- [What you get](#what-you-get)
 - [Requirements](#requirements)
-- [Installation](#installation)
-- [Quick start](#quick-start)
-- [How conversion works](#how-conversion-works)
-- [What's new in v1.01](#whats-new-in-v101)
-- [Command-line reference](#command-line-reference)
-- [Examples](#examples)
-- [Output layout](#output-layout)
-- [Performance and safety](#performance-and-safety)
-- [Known limitations and troubleshooting](#known-limitations-and-troubleshooting)
+- [Find and copy your Draw Things project on a Mac](#find-and-copy-your-draw-things-project-on-a-mac)
+- [Install ComfyThings](#install-comfythings)
+- [Export your first project](#export-your-first-project)
+- [Use your exports in ComfyUI](#use-your-exports-in-comfyui)
+- [More ways to export](#more-ways-to-export)
+- [Complete command-line reference](#complete-command-line-reference)
+- [Updating an older video from a workflow PNG](#updating-an-older-video-from-a-workflow-png)
+- [Time, storage, and safety](#time-storage-and-safety)
+- [Troubleshooting and limitations](#troubleshooting-and-limitations)
+
+## What's Changed in v1.02 (Compared with v1.01)
+
+In v1.01, ComfyThings already exported still-image PNGs with ComfyUI workflows embedded in them. It could also export videos, but their workflows were saved in separate first-frame PNG files. **Version 1.02 brings that same convenience to video exports:** the workflow is now stored inside the video itself.
+
+Here's what changed:
+
+- **Video workflows are now embedded by default.** Exported MP4, MOV, MKV, and WebM files contain ComfyUI `workflow` and `prompt` metadata. You can drag a supported video into ComfyUI to load its workflow without needing a separate PNG.
+- **The original Draw Things generation details travel with the video.** In addition to the ComfyUI workflow, v1.02 embeds available source generation information and original history and clip records. Those records are compressed and integrity-checked.
+- **Separate video workflow PNGs are no longer created automatically.** In v1.01 they were part of the default video export. In v1.02, use `--video-workflows` when you want those extra files, or `--video-workflows-only` when you want just the workflow PNGs.
+- **More video models get connected ComfyUI workflows.** Reconstruction now supports LTX-2, LTX-2.3, and Wan 2.1 image-to-video through a shared system that handles different model architectures and generation tasks. When there is not enough information to build a meaningful graph, ComfyThings still provides an explanatory Note.
+- **You can add workflows to videos exported previously.** The optional `--embed-existing-video-workflows` command matches older videos to their workflow PNGs and adds workflow and source metadata without re-encoding the video or audio.
+
+**What hasn't changed:** Ordinary still images are still exported as **8-bit PNGs by default** (16-bit remains optional); ComfyThings still reads the Draw Things project database without changing it; and the existing video encoding quality settings remain the same. The `--no-video-workflows` flag has been removed because separate workflow PNGs are already disabled by default.
+
+## What you get
+
+**Images:** ComfyThings extracts generated still images at their recorded resolution and saves them as **8-bit RGB PNGs by default**. Each PNG includes a reconstructed ComfyUI workflow, its execution data, and available original Draw Things generation metadata. You can request **16-bit PNGs** if you prefer. Images are processed one at a time, not in parallel.
+
+**Videos:** When a project contains video clips, ComfyThings exports playable **MP4 videos by default**, including audio if it exists in the source. It also supports MOV, MKV, and WebM, along with several quality settings. Each exported video contains its **ComfyUI workflow and original Draw Things source metadata**, including available generation and video-clip records. You do not need a companion workflow PNG to open a newly exported video's workflow.
+
+**Optional extras:** You can choose to export every video frame as a PNG, a standalone WAV for each video with available audio, or a separate first-frame video workflow PNG. **Separate video workflow PNGs are *not* created by default** in v1.02.
+
+ComfyThings reconstructs workflows from the information Draw Things stored. It supports connected workflows for several video architectures, including **LTX-2, LTX-2.3, and Wan 2.1 image-to-video**. When a graph cannot be reliably reconstructed, the exported metadata instead explains what was found. That way, the result remains useful without pretending to know settings or connections that were not recorded.
 
 ## Requirements
 
-- **macOS**. Other platforms are not supported by this release.
-- **Python 3.9 or newer**.
-- Python packages: **numpy**, **fpzip**, **certifi** (listed in `requirements.txt`).
-- **FFmpeg and ffprobe** on your `PATH` to encode video. They are not required for images-only exports.
-- Sufficient free disk space for PNGs, video files, and temporary output during atomic writes.
-- A Draw Things project database (`.sqlite3`), preferably a copy of the original.
+- **A Mac running macOS.** This release is intended for macOS, not Windows or Linux.
+- **Python 3.9 or later** (available as `python3` in Terminal).
+- The Python packages **numpy**, **fpzip**, and **certifi**.
+- **FFmpeg and ffprobe** if you want to export or update videos. They are not needed for an images-only export.
+- Enough free storage for the exported images and videos, and temporary files used during safe writes.
+- A **copy of a Draw Things `.sqlite3` project database**.
 
-Some ComfyUI workflows require compatible model weights and additional nodes. The exporter does **not** download or substitute checkpoint files automatically.
+## Find and copy your Draw Things project on a Mac
 
-## Installation
+Draw Things stores project histories in SQLite database files, rather than keeping every generation as a separate image in a normal Finder folder. Here is how to get one ready for ComfyThings:
 
-Copy `ComfyThings.py`, `README.md`, and `requirements.txt` into a directory. In Terminal:
+1. **Quit Draw Things** before making a copy. This helps ensure the database isn't changing while you copy it.
+2. In **Finder**, open the **Go** menu and select **Go to Folder…** (or press **Shift-Command-G**).
+3. Paste this common Draw Things data location and press Return:
+
+   ```text
+   ~/Library/Containers/com.liuliu.draw-things/Data/Documents/
+   ```
+
+4. Look for your project's **`.sqlite3`** file. The folder's display name can vary by macOS version; projects you moved to another drive will be wherever you stored them.
+5. **Copy, don't move,** the database to a working directory—for example, `~/ComfyThings`. If there are matching `-wal` or `-shm` companion files, copy them with the database after Draw Things has quit. Keep your original project untouched.
+
+For the examples below, assume you've copied a project named **`MyProject.sqlite3`** into `~/ComfyThings` and also put the ComfyThings files there. The examples are deliberately generic: use your project's *actual* filename.
+
+## Install ComfyThings
+
+Download the release and put **`ComfyThings.py`**, **`README.md`**, and **`requirements.txt`** together in a folder. The included `README.txt` is the same guide in plain-text form, if you prefer it.
+
+Open Terminal and change to that folder:
+
+```bash
+cd ~/ComfyThings
+```
+
+Set up a Python environment and install the required packages:
 
 ```bash
 python3 -m venv .venv
@@ -43,226 +93,273 @@ source .venv/bin/activate
 python3 -m pip install -r requirements.txt
 ```
 
-If you will export videos, install FFmpeg, for example with Homebrew:
+If you'll export videos, install FFmpeg. With [Homebrew](https://brew.sh/) already installed, run:
 
 ```bash
 brew install ffmpeg
 ```
 
-Verify the command-line interface:
+Confirm that ComfyThings starts:
 
 ```bash
 python3 ComfyThings.py --version
 python3 ComfyThings.py --help
 ```
 
-**Protect the source database.** Quit Draw Things before copying the project. If the source database has `-wal` or `-shm` sidecar files, copy the necessary sidecars together with it while the database is in a consistent state. Export from the copy, not a live project being updated by Draw Things. ComfyThings opens the database read-only.
+The first command should report **v1.02**. On later Terminal visits, return to the folder and run `source .venv/bin/activate` before using ComfyThings.
 
-## Quick start
+## Export your first project
 
-From the directory containing `ComfyThings.py`, with a copied database named `MyProject.sqlite3`:
+With `MyProject.sqlite3` in your current folder, the default command is:
 
 ```bash
-# Default export: 8-bit still PNGs, encoded MP4s, and video workflow PNGs
 python3 ComfyThings.py MyProject
+```
 
-# Choose a separate destination
+You can leave off the `.sqlite3` extension. ComfyThings reads the project and creates an output directory called **`MyProject`** in your current directory. By default, it exports:
+
+- **8-bit PNGs** for ordinary still images, with workflows embedded in each PNG.
+- **MP4s** for video clips, with ComfyUI workflows and original generation metadata embedded in the video files.
+- **Audio inside videos** when audio is available for those clips.
+
+You can choose a different destination by adding it as the second argument:
+
+```bash
 python3 ComfyThings.py MyProject MyProject_Exports
-
-# Ordinary still PNGs only
-python3 ComfyThings.py MyProject MyProject_Images --images-only
-
-# Request 16-bit still PNGs explicitly
-python3 ComfyThings.py MyProject MyProject_16bit --images-only --bit-depth 16
-
-# Preview the export plan without writing media
-python3 ComfyThings.py MyProject --dry-run
 ```
 
-The required `database` argument accepts a project name, a `.sqlite3` filename, or a path to the database. The optional second positional argument is the output directory; if omitted, the project stem is used in the current working directory.
-
-**Defaults:** 8-bit RGB PNG for ordinary stills; MP4 using H.264 CRF18 and AAC when audio exists; video workflow PNGs included. `--bit-depth 16` is optional and **does not change the default**.
-
-## How conversion works
-
-1. **Reads Draw Things history and tensor records.** Source database access is read-only. Image tensor associations must be supported by the stored history and metadata; ambiguous associations are not guessed.
-2. **Decodes stored FPZIP image tensors.** Outputs full-resolution RGB PNGs, with no arbitrary pixel replacement or resizing to hide invalid source geometry.
-3. **Builds ComfyUI metadata.** Each generated PNG embeds ComfyUI `workflow` and `prompt` information, reconstruction notes, available original generation fields, and source-history provenance. No separate workflow JSON file is needed.
-4. **Identifies model families conservatively.** ComfyThings includes an embedded Draw Things model catalog and can query Civitai when additional model identification is warranted and network access is available. Uncertain classifications are identified as such rather than assigned unsupported model architectures.
-5. **Exports videos when enabled.** Video clips are encoded using FFmpeg. First-frame workflow PNGs are produced where available. Video workflows may be connected or informational, depending on the model architecture and supported nodes.
-6. **Verifies and resumes output.** Existing files are checked against their recorded provenance and relevant export settings. Conflicting or unverified content is not silently overwritten.
-
-### Image-tensor recovery modes
-
-ComfyThings conservatively handles several Draw Things history layouts:
-
-- **Missing-ID recovery (enabled by default):** allows narrowly constrained tensor associations when one stored slot has an absent tensor ID and the other supplies a valid image, including carefully limited later history reuse. Use `--no-recover-empty-slots` to disable it.
-- **Editing-sequence recovery (opt-in):** `--recover-editing-sequences` permits a strict multi-slot append-successor pattern only when consecutive history records and supporting metadata establish the relationship. This is **not** a blanket “last tensor wins” rule.
-- **Recovery-only exports:** `--recovery-only` limits output to the missing-ID recovery category; `--editing-recovery-only` limits output to the opt-in editing-sequence category. These two modes cannot be combined.
-
-## What's new in v1.01
-
-Compared with the previous full release, **v1.00**, v1.01 adds or expands:
-
-- **Architecture-aware ComfyUI workflow reconstruction**, including model-family notes and more useful connected graphs where architecture support permits.
-- **Conservative tensor association and recovery** for additional valid Draw Things history layouts. Missing-ID recovery is enabled by default; editing-sequence recovery is available as an explicit opt-in.
-- **8-bit RGB PNG as the default ordinary still-image format**, while retaining optional full 16-bit PNG output.
-- **Expanded video export controls:** MP4, MOV, MKV, and WebM containers; configurable encoding-quality profiles; per-clip frame PNGs; optional standalone WAV audio; and individual video workflow PNGs.
-- **Resumable, verified media exports**, with additional protection against mismatched destination files and incompatible settings.
-- **Customizable output filenames**, progress reporting, and additional command-line controls.
-
-These are changes delivered in the full **v1.01** release.
-
-## Command-line reference
-
-### General and image options
-
-| Option | Behavior |
-|---|---|
-| `database` | Required source `.sqlite3` database path or filename stem. |
-| `output_dir` | Optional destination directory. Defaults to source stem in current directory. |
-| `--images-only` | Export ordinary still PNGs only; disable all video-related output. |
-| `--videos-only`, `--no-images` | Suppress ordinary still PNGs, retaining configured video outputs. |
-| `--bit-depth {8,16}` | RGB PNG output precision; **8-bit default**. |
-| `--png-filter {adaptive,none}` | Lossless scanline filtering; `adaptive` default. |
-| `--compression-level N` | PNG zlib compression level 0–9; **9 default**. |
-| `--filename-prefix PREFIX` | Customize generated image/video basename prefix; `DrawThings` default. |
-| `--limit N` | Limit generated still-image records processed; `0` means unlimited. |
-| `--dry-run` | Show the export plan without writing media files. |
-| `--utc` | Use UTC rather than local system time in timestamp-based filenames. |
-| `--no-set-birthtime` | Do not attempt to set macOS Created timestamps. |
-| `--no-progress` | Hide animated progress bars and spinner. |
-| `--verbose`, `-v` | Print more processing details. |
-| `--verify`, `--no-verify` | Enable/disable post-write PNG pixel-stream verification; enabled by default. |
-| `--no-integrity-check` | Skip SQLite `PRAGMA quick_check`; intended only for trusted copies. |
-| `--version`, `--help` | Show version or command-line help. |
-
-### Recovery options
-
-| Option | Behavior |
-|---|---|
-| `--recover-empty-slots` | Enable strictly validated missing-ID recovery; **enabled by default**. |
-| `--no-recover-empty-slots` | Disable missing-ID recovery. |
-| `--recovery-only` | Export only eligible missing-ID still-image recoveries, without videos. |
-| `--recover-editing-sequences` | Opt in to guarded multi-slot editing-history recovery; **off by default**. |
-| `--editing-recovery-only` | Export only newly eligible editing-sequence histories; automatically opts in to the rule. |
-
-### Video options
-
-| Option | Behavior |
-|---|---|
-| `--no-videos` | Do not encode video files; separate workflows are also suppressed unless explicitly enabled. |
-| `--video-workflows` | Explicitly export separate first-frame video workflow PNGs. |
-| `--no-video-workflows` | Suppress separate video workflow PNGs. |
-| `--video-workflows-only` | Export only video workflow PNGs; no ordinary stills, video files, extra frames, or WAVs. |
-| `--video-export-frames` | Export each video frame as a PNG in its clip directory. |
-| `--video-export-audio` | Export standalone per-clip WAV files in addition to any encoded-video audio. |
-| `--video-format {mp4,mov,mkv,webm}` | Select the video container; MP4 is the normal default. |
-| `--video-quality {default,high,professional,lossless}` | Select codec and quality profile. |
-
-The standard video profile is **H.264 CRF18**, 8-bit `yuv420p`, with AAC audio if available. `high` uses H.264 CRF14; `professional` uses 10-bit HEVC; `lossless` uses FFV1 with 16-bit RGB output in MKV and floating-point PCM audio. WebM uses VP9/Opus. Compatibility depends on the selected container and encoder support in your FFmpeg installation.
-
-## Examples
-
-### Selected image exports
+If your project name or path has spaces, put it in quotes:
 
 ```bash
-# A small, bounded export into a separate directory
-python3 ComfyThings.py MyProject MyProject_Sample --images-only --limit 5
-
-# Export 16-bit images without changing any defaults
-python3 ComfyThings.py MyProject MyProject_16bit --images-only --bit-depth 16
-
-# Use a trusted database copy without the potentially lengthy integrity check
-python3 ComfyThings.py MyProject MyProject_Images --images-only --no-integrity-check
-
-# Enable the optional editing-sequence recovery during a normal export
-python3 ComfyThings.py MyProject MyProject_Exports --recover-editing-sequences
-
-# Export only images eligible under that recovery rule
-python3 ComfyThings.py MyProject MyProject_Editing --editing-recovery-only
-
-# Export only the strict missing-ID recovery category
-python3 ComfyThings.py MyProject MyProject_Recovered --recovery-only
-
-# Customize output filenames and hide animated progress
-python3 ComfyThings.py MyProject MyProject_Custom --filename-prefix Rendered --no-progress
+python3 ComfyThings.py "My Project.sqlite3" "My Project Exports"
 ```
 
-### Videos and video-related media
+You can also give an absolute path to a copied database:
 
 ```bash
-# Video files with their default workflow PNGs; no ordinary stills
-python3 ComfyThings.py MyProject --videos-only
-
-# Export only the video workflow PNGs
-python3 ComfyThings.py MyProject --video-workflows-only
-
-# Alternate output containers
-python3 ComfyThings.py MyProject --videos-only --video-format mov
-python3 ComfyThings.py MyProject --videos-only --video-format mkv
-python3 ComfyThings.py MyProject --videos-only --video-format webm
-
-# Higher-quality encoded video
-python3 ComfyThings.py MyProject --videos-only --video-quality high
-
-# Lossless FFV1 in MKV
-python3 ComfyThings.py MyProject --videos-only --video-quality lossless
-
-# Export additional video frames and standalone audio
-python3 ComfyThings.py MyProject --videos-only --video-export-frames --video-export-audio
-
-# Media assets without encoding the video itself
-python3 ComfyThings.py MyProject --no-images --no-videos --video-workflows --video-export-frames --video-export-audio
+python3 ComfyThings.py "/Volumes/Archive/Draw Things/MyProject.sqlite3" "MyProject_Exports"
 ```
 
-## Output layout
+### Where the files go
 
-With the default filename prefix, output resembles:
+A typical default export looks like this:
 
 ```text
-MyProject_Exports/
+MyProject/
+├── DrawThings_YYYYMMDD_HHMMSS_microseconds.png
 ├── DrawThings_YYYYMMDD_HHMMSS_microseconds.png
 └── videos/
     ├── DrawThings_YYYYMMDD_HHMMSS_microseconds.mp4
-    └── DrawThings_YYYYMMDD_HHMMSS_microseconds/
-        ├── DrawThings_YYYYMMDD_HHMMSS_microseconds_workflow.png
-        ├── DrawThings_YYYYMMDD_HHMMSS_microseconds_000001.png  # optional frames
-        └── DrawThings_YYYYMMDD_HHMMSS_microseconds.wav          # optional audio
+    └── DrawThings_YYYYMMDD_HHMMSS_microseconds.mp4
 ```
 
-Files and per-clip folders are generated only for the media requested and available in the source. Optional video frames are stored within their clip folders rather than filling the main export directory. The video workflow is included in the first-frame workflow PNG; not every architecture produces an executable video graph.
+The names use generation timestamps, including microseconds. Video clips are grouped as videos—not exported into hundreds of loose PNG frames unless you explicitly request those frames.
 
-## Performance and safety
+If you enable the extra video outputs, each clip can also have its own folder under `videos/`:
 
-**Large exports may run for a substantial amount of time.** The source-database integrity check can be expensive on large projects, and full-resolution FPZIP decoding, PNG compression, output verification, and video encoding add processing time. Runtime depends on database size, image dimensions, storage performance, and chosen encoding settings.
+```text
+videos/
+├── DrawThings_YYYYMMDD_HHMMSS_microseconds.mp4
+└── DrawThings_YYYYMMDD_HHMMSS_microseconds/
+    ├── DrawThings_YYYYMMDD_HHMMSS_microseconds_workflow.png  (optional)
+    ├── DrawThings_YYYYMMDD_HHMMSS_microseconds_000001.png    (optional frame)
+    ├── DrawThings_YYYYMMDD_HHMMSS_microseconds_000002.png    (optional frame)
+    └── DrawThings_YYYYMMDD_HHMMSS_microseconds.wav           (optional audio)
+```
 
-- For a small amount of work, start with `--images-only --limit 5` in a **new destination**. This bounds ordinary still-image work but does not predict full video-export time.
-- Default PNG zlib compression uses level 9, prioritizing smaller lossless files over speed. Changing compression affects file size and runtime, not image precision.
-- Use `--no-integrity-check` only for a trusted database copy; it skips a database-level check, **not** image decoding or export verification.
-- Keep separate output directories for differing settings, especially **8-bit versus 16-bit** exports. Do not rely on resuming one bit depth over files created at the other depth.
-- Source image processing is **sequential**: ComfyThings processes one image tensor at a time, not images in parallel.
-- Resume checks protect existing outputs; the exporter rejects conflicting provenance rather than silently treating unrelated files as its own.
-- Invalid source data is reported instead of replaced with fabricated pixels or resized to misleading dimensions.
+Only requested and available media are written. The clip folders do not need to exist for the normal MP4-only video output.
 
-## Known limitations and troubleshooting
+## Use your exports in ComfyUI
 
-**Damaged source tensors.** FPZIP input can occasionally contain nonfinite numbers or invalid tensor geometry. Those images cannot always be rendered faithfully; ComfyThings reports failures rather than inventing data.
+**For still images:** Drag an exported PNG into the ComfyUI canvas. ComfyUI can read the embedded workflow from the PNG, showing the reconstructed nodes and settings. The image is still a normal PNG you can view or edit with other applications.
 
-**Unsupported or unknown architectures.** ComfyUI workflow reconstruction is best-effort. A model may need compatible weights, installed nodes, or manual adjustments. Unsupported video architectures may produce informational Note-only workflows instead of connected executable graphs.
+**For videos:** Drag an exported MP4 into a ComfyUI installation that supports importing workflow metadata from video files. ComfyThings stores the standard `workflow` and `prompt` information directly in the video, so no separate workflow PNG is needed. The video itself also remains playable in ordinary video players.
 
-**Video playback compatibility.** MP4 is the standard output. MOV, MKV, WebM, and alternate quality profiles have not all been comprehensively validated with every macOS playback application or FFmpeg build.
+A reconstructed workflow is a starting point for examining or continuing your generation work. Depending on the model and task, you may need to choose local model files or provide an original input image. For an image-to-video workflow, the original conditioning image is **not** inferred from the video's first generated frame: the `LoadImage` input is left for you to fill.
 
-**Draw Things round-trip compatibility.** Available source-generation information is retained where supported, but reimporting every exported file into Draw Things is not guaranteed.
+If ComfyThings does not have a connected workflow template for a particular generation, you'll still see a readable Note with the source settings rather than an invented graph.
 
-**Orphaned video records.** Some projects may contain clip headers without corresponding frame histories. ComfyThings does not invent frames from a header's claimed frame count.
+## More ways to export
 
-**Missing dependencies.** If `numpy`, `fpzip`, or `certifi` cannot be imported, install `requirements.txt` into the same Python environment used to run the script. For video encoding, ensure `ffmpeg` and `ffprobe` are installed and available on `PATH`.
+The normal command is enough for most people. These examples cover some common variations.
 
-**No exported files appear.** Check the destination shown in the console, whether `--dry-run` is enabled, and whether the chosen mode suppresses the requested media type. Use `--verbose` for more detail.
+### Only images, or higher-precision PNGs
 
-**Export files already exist.** ComfyThings verifies ownership and settings before reuse. If you're changing output precision, naming, or workflow options, choose a new destination.
+```bash
+# Export only still images—no video processing
+python3 ComfyThings.py MyProject MyImages --images-only
+
+# Export 16-bit still PNGs instead of the default 8-bit
+python3 ComfyThings.py MyProject MyImages16 --images-only --bit-depth 16
+
+# Export a small sample of five still images
+python3 ComfyThings.py MyProject SampleImages --images-only --limit 5
+```
+
+### Videos and optional companion media
+
+```bash
+# Export videos, but not ordinary still images
+python3 ComfyThings.py MyProject VideoExports --videos-only
+
+# Export videos and also save a separate first-frame workflow PNG for each clip
+python3 ComfyThings.py MyProject VideoExports --videos-only --video-workflows
+
+# Export only separate video workflow PNGs, without encoding videos
+python3 ComfyThings.py MyProject VideoWorkflowPNGs --video-workflows-only
+
+# Export video frames and standalone WAVs in addition to the video files
+python3 ComfyThings.py MyProject VideoExports --videos-only --video-export-frames --video-export-audio
+
+# Use a different video container
+python3 ComfyThings.py MyProject VideoExports --videos-only --video-format mov
+
+# Higher-quality H.264 output
+python3 ComfyThings.py MyProject VideoExports --videos-only --video-quality high
+
+# Lossless video (MKV is chosen automatically)
+python3 ComfyThings.py MyProject VideoExports --videos-only --video-quality lossless
+```
+
+### Preview and other useful controls
+
+```bash
+# Preview what would be exported; no media is written
+python3 ComfyThings.py MyProject --dry-run
+
+# Use a custom filename prefix
+python3 ComfyThings.py MyProject MyExports --filename-prefix MyRenders
+
+# Skip the SQLite quick integrity check on a database copy you already trust
+python3 ComfyThings.py MyProject MyExports --no-integrity-check
+
+# Include the optional guarded editing-history recovery
+python3 ComfyThings.py MyProject MyExports --recover-editing-sequences
+```
+
+The database integrity check and history scan can take a noticeable amount of time on large projects, **even in dry-run mode**. For a very large project, don't assume a preview is instantaneous.
+
+## Complete command-line reference
+
+These are **all command-line arguments in v1.02**. Options without an explicit value are switches: add the flag to enable the behavior.
+
+### Project, images, and general options
+
+| Argument or flag | What it does |
+| --- | --- |
+| `database` | The Draw Things project to read. Give the `.sqlite3` filename, its path, or its name without the extension. Required for normal exports; in existing-video mode this argument is instead the video file or directory. |
+| `output_dir` | Optional output folder. Defaults to the project filename without `.sqlite3`, created under the current working directory. Not used in existing-video mode. |
+| `--images-only` | Export ordinary still-image PNGs only. Disables all video-related outputs. |
+| `--videos-only`, `--no-images` | Skip ordinary still images while retaining video exports and their chosen options. These two names do the same thing. |
+| `--bit-depth {8,16}` | PNG color precision. **8** is the default; choose **16** for 16-bit RGB PNGs. |
+| `--png-filter {adaptive,none}` | Choose PNG scanline filtering. **adaptive** is the default; both choices preserve pixel values. |
+| `--compression-level N` | PNG compression from **0** (least) to **9** (most); default **9**. It changes size and compression time, not image quality. |
+| `--filename-prefix PREFIX` | Change the `DrawThings` prefix used for generated filenames and clip folders. |
+| `--limit N` | Process only the first **N** eligible ordinary still images; **0** means all. Since video clips must remain complete, use this with `--images-only` or `--no-videos`, not with default encoded-video export. |
+| `--dry-run` | Show which outputs would be made without writing images or videos. Also works with existing-video embedding. |
+| `--utc` | Use UTC rather than your Mac's local time when producing timestamp-based filenames. |
+| `--no-set-birthtime` | Do not try to set the exported file's macOS **Date Created** from its generation history. |
+| `--no-progress` | Turn off animated progress reporting and print simpler phase and summary output. |
+| `--verbose`, `-v` | Print additional details for individual images or video clips; disables the live progress display. |
+| `--verify` | Enable the additional post-write PNG pixel-stream check (already enabled by default). |
+| `--no-verify` | Skip that optional *new-file* deep pixel-stream check. Existing-file resume validation still checks prior output. |
+| `--no-integrity-check` | Skip the initial full SQLite `PRAGMA quick_check`. This can save time on a trusted database copy, but removes that pre-export check. |
+| `--version` | Print the ComfyThings version and exit. |
+| `--help`, `-h` | Show the built-in help and exit. |
+
+### Recovering images from unusual history layouts
+
+Draw Things can retain multiple image tensors for an editing history, or leave references that need careful interpretation. ComfyThings takes a conservative approach rather than guessing which image to export.
+
+| Flag | What it does |
+| --- | --- |
+| `--recover-empty-slots` | Enable narrowly validated missing-tensor-ID recovery. **On by default**. |
+| `--no-recover-empty-slots` | Turn off that recovery and use strict ordinary tensor selection. |
+| `--recovery-only` | Export only images eligible under the missing-ID recovery rule, with no video export. |
+| `--recover-editing-sequences` | Opt in to additional, strictly checked editing-sequence recovery. **Off by default**. |
+| `--editing-recovery-only` | Export only images eligible under the additional editing-sequence rule. It automatically enables `--recover-editing-sequences`; it cannot be combined with `--recovery-only`. |
+
+Most users won't need to change these options. The default missing-ID recovery is already enabled, and other ambiguous situations are left unresolved rather than filled in with guesses.
+
+### Video options
+
+| Flag | What it does |
+| --- | --- |
+| `--no-videos` | Do not encode videos. You can still explicitly request separate video workflow PNGs or frames using their own flags. |
+| `--video-workflows` | **Also** save a standalone first-frame workflow PNG for each video, in addition to other requested media. Off by default. |
+| `--video-workflows-only` | Export only first-frame video workflow PNGs: no stills, videos, extra frames, or WAVs. |
+| `--video-export-frames` | Save all frames of each video as numbered PNGs in the corresponding clip folder. |
+| `--video-export-audio` | Save an additional clip-named WAV when audio is available, alongside any audio in the encoded video. |
+| `--video-format {mp4,mov,mkv,webm}` | Choose the video container. Default: **mp4**, except lossless output defaults to **mkv**. |
+| `--video-quality {default,high,professional,lossless}` | Choose the encoding profile. See below. |
+| `--embed-existing-video-workflows` | Instead of opening a database, update an existing video—or a directory of videos—from matching workflow PNGs. This is an optional utility for older exports. |
+| `--recursive` | With `--embed-existing-video-workflows` in directory mode, include video files in subdirectories. Not used in normal project export mode. |
+
+**Video quality profiles:**
+
+| Quality | Output behavior |
+| --- | --- |
+| `default` | **H.264 CRF 18**, 8-bit `yuv420p`; AAC audio when available. |
+| `high` | **H.264 CRF 14** for higher-quality lossy output. |
+| `professional` | **10-bit HEVC** output. |
+| `lossless` | **16-bit FFV1 video and floating-point PCM audio** in MKV. |
+
+WebM uses a VP9/Opus profile where supported. Not every codec/profile combination is valid in every container; ComfyThings checks your selection before starting the export.
+
+## Updating an older video from a workflow PNG
+
+This is a **separate, optional operation**. You usually won't need it when exporting a new Draw Things project with v1.02.
+
+If you have a video produced earlier and a corresponding ComfyThings workflow PNG, put them together with matching filename stems—for example, `Video001.mp4` and `Video001_workflow.png`. ComfyThings also recognizes `Video001.png`, or a workflow PNG in the corresponding clip-named subfolder.
+
+For one video:
+
+```bash
+python3 ComfyThings.py --embed-existing-video-workflows Video001.mp4
+```
+
+For all video files in a folder:
+
+```bash
+python3 ComfyThings.py --embed-existing-video-workflows MyVideos
+```
+
+To include nested folders, add `--recursive`. To see which videos can be updated without changing files, add `--dry-run`.
+
+The utility reads the original workflow and generation information from the PNG, then embeds them in the matched MP4, MOV, MKV, or WebM **without re-encoding the video or audio**. It can add source metadata to a video that already has a workflow, and can upgrade certain informational-only ComfyThings workflows when enough original metadata is present. It will not silently replace an unrelated workflow. It leaves the PNG untouched and reports which files were updated, skipped, or couldn't be updated, with reasons.
+
+If the video has no useful generation metadata and you don't have its matching workflow PNG, ComfyThings cannot reconstruct the missing generation settings from the video pixels alone.
+
+## Time, storage, and safety
+
+**Allow time for large projects.** Before exporting, ComfyThings checks the copied SQLite database's integrity (unless disabled), scans its generation histories, and identifies image tensors. Full-resolution image decoding, PNG compression and verification, and video encoding can take considerably longer than just copying files. The time depends on your project size, image dimensions, video lengths, compression settings, and Mac/storage performance. There is no fixed per-project estimate.
+
+**Your Draw Things database is not modified.** ComfyThings reads it in read-only mode. It processes image tensors one at a time, writes to temporary files, validates the result, and then publishes completed outputs. Existing exports are checked before reuse or repair; ComfyThings will not intentionally replace a different file merely because it shares a filename.
+
+**Video metadata updates are not video re-encodes.** Adding a workflow to an existing video still requires copying the video container to a temporary file. Larger videos therefore take longer, and enough temporary free space is needed for at least the video being updated.
+
+**Original generation metadata is retained.** Output PNGs and videos can contain your prompts, model names, timestamps, and other recorded generation settings, as well as technical source-history records. The separate project database is not required to load an embedded ComfyUI workflow.
+
+## Troubleshooting and limitations
+
+**`python3` or a Python package is missing.** Confirm Python is installed, activate `.venv`, and run `python3 -m pip install -r requirements.txt` from the folder containing `requirements.txt`.
+
+**`ffmpeg` or `ffprobe` is missing.** Install FFmpeg (`brew install ffmpeg`) for video operations. An `--images-only` export does not require FFmpeg.
+
+**The project database cannot be found.** Check the exact `.sqlite3` filename. If you are not in the folder containing the copied database, pass its full path in quotes.
+
+**The export seems slow before producing files.** A large database's integrity check and history scan can take time before the first PNG appears. You can omit the integrity check with `--no-integrity-check` when working from a database copy you trust.
+
+**Some images cannot be exported.** A source tensor can be missing, damaged, or ambiguously associated with a Draw Things history record. ComfyThings reports these cases rather than inventing pixels or choosing an uncertain image.
+
+**An imported workflow contains only a Note.** The model or generation task may not have a supported connected workflow template, or sufficient source details may be unavailable. The Note preserves useful information about the original generation.
+
+**A video workflow asks for an image.** For image-to-video workflows, choose the original input image in the `LoadImage` node. ComfyThings does not substitute the video's first generated frame for the original input.
+
+**An existing video cannot be updated.** The optional embedding command needs a matching workflow PNG containing usable metadata. The terminal's **Videos not updated** section explains missing matches, ambiguous matches, unreadable metadata, and other reasons.
+
+**An export directory already contains files.** ComfyThings can verify and resume compatible exports, but it may reject files that don't match the expected source or settings. Use a fresh destination if you want an independent conversion rather than a continuation of an earlier one.
 
 ---
 
-**ComfyThings v1.01** — stable release for macOS. This README is the complete public user guide, release summary, and limitations reference for v1.01.
+**ComfyThings v1.02** · macOS · Draw Things project `.sqlite3` to ComfyUI-ready PNGs and workflow-bearing videos
