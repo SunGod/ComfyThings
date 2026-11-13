@@ -1,3 +1,5 @@
+<image src="images/ComfyThings_banner_1672x308.png" alt="ComfyThings_banner_1672x308.png">
+   
 # ComfyThings
 
 **A Draw Things to ComfyUI metadata and media exporter**  
