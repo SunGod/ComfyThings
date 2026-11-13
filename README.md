@@ -3,6 +3,9 @@
 # ComfyThings
 
 **A Draw Things-to-ComfyUI image, video, workflow and metadata bulk exporter**  
+
+**Note:** If you want to convert existing PNGs that you previously exported manually from Draw Things, use [Draw Things-to-ComfyUI PNG Metadata Converter](https://github.com/SunGod/DrawThings-to-ComfyUI-PNG-Metadata-Converter) instead.
+
 **Platform:** macOS  
 **Current release:** v1.02 (November 2026)
 
