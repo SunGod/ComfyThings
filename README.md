@@ -2,7 +2,7 @@
    
 # ComfyThings
 
-**A Draw Things to ComfyUI metadata and media exporter**  
+**A Draw Things-to-ComfyUI image, video, workflow and metadata bulk exporter**  
 **Platform:** macOS  
 **Current release:** v1.02 (November 2026)
 
